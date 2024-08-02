@@ -1,55 +1,37 @@
 pipeline {
-// use of variables
-    environment{
-        FNAME = "john"
-        ENV = "prod"
-        compileprocess = "compile"
-        goaltesting = "test"
-        goalpackage = "package"
-        goalqa = "pmd:pmd"
-    }
     agent any
     stages{
-        stage('checkout'){
+        stage('Build Maven'){
             steps{
-                git url:'https://github.com/akshu20791/cicdakshat/'
-                echo 'checkout completed'
-                sh "echo hello ${FNAME}"
-            }
-               
-            }
-        stage('codecompile'){
-            steps{
-                echo 'convert the code from userreadable language to machine readable'
-                sh "mvn ${compileprocess}"
+                git url:'https://github.com/Felix-Jayan/firstproject/', branch: "master"
+               sh 'mvn clean install'
             }
         }
-       stage('parallelstage'){
-         parallel{
-           stage('codetesting'){
+        stage('Build docker image'){
             steps{
-                echo "test the functionality of the code"
-                echo "test cases getting executed"
-                sh "mvn ${goaltesting}"
+                script{
+                    sh 'docker build -t fiya/myfirstproject:v1 .'
+                }
             }
         }
-         stage('quality-assurance'){
-            steps{
-                echo "checking the quality and bugs in the code"
-                sh "mvn ${goalqa}"
-                echo "code analysis done"
-                recordIssues(tools: [pmdParser()])
-              }
-            }
-          }
-        }
-        stage('package the code'){
-//use of when statement
-            when{ expression {env.GIT_BRANCH == 'origin/master'}}
-            steps{
-                echo "package the code"
-                sh "mvn ${goalpackage}"
+          stage('Docker login') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-pwd', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                    sh "echo $PASS | docker login -u $USER --password-stdin"
+                    sh 'docker push fiya/myfirstproject:v1'
+                }
             }
         }
+        
+        
+        stage('Deploy to k8s'){
+            when{ expression {env.GIT_BRANCH == 'master'}}
+            steps{
+                script{
+                     kubernetesDeploy (configs: 'deploymentservice.yaml' ,kubeconfigId: 'k8sconfigpwd')
+                   
+                }
+            }
         }
+    }
 }
